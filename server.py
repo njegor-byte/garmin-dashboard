@@ -1,76 +1,57 @@
 import os
-import requests
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
 
-FS_CLIENT_ID = os.environ.get("FS_CLIENT_ID")
-FS_CLIENT_SECRET = os.environ.get("FS_CLIENT_SECRET")
-
-def get_fatsecret_token():
-    """Автоматическое получение fresh access_token через OAuth 2.0"""
-    url = "https://oauth.fatsecret.com/connect/token"
-    data = {'grant_type': 'client_credentials', 'scope': 'basic'}
-    auth = (FS_CLIENT_ID, FS_CLIENT_SECRET)
+# Единая база данных за текущий день
+health_data = {
+    # Питание (из FatSecret)
+    'consumedCalories': 0,
+    'carbs': 0,
+    'protein': 0,
+    'fat': 0,
     
-    response = requests.post(url, data=data, auth=auth)
-    if response.status_code == 200:
-        return response.json().get('access_token')
-    return None
+    # Активность и Здоровье (из Garmin)
+    'activeCalories': 0,
+    'restingCalories': 0,
+    'steps': 0,
+    'distanceKm': 0.0,
+    'avgHeartRate': 0,
+    'sleepHours': 0.0
+}
 
 @app.route('/')
 def home():
-    return jsonify({"status": "ok", "message": "Backend is running"})
+    return jsonify({"status": "ok", "message": "Health Dashboard Backend Ready"})
 
-@app.route('/api/fatsecret/today', methods=['GET'])
-def get_fatsecret_data():
-    if not FS_CLIENT_ID or not FS_CLIENT_SECRET:
-        return jsonify({'error': 'FatSecret keys are missing'}), 400
+# Эндпоинт для дашборда
+@app.route('/api/health/today', methods=['GET'])
+def get_health_data():
+    return jsonify(health_data)
 
-    token = get_fatsecret_token()
-    if not token:
-        return jsonify({'error': 'Failed to obtain FatSecret access token'}), 500
-
-    try:
-        # Запрос данных дневника за сегодня через REST API
-        url = "https://platform.fatsecret.com/rest/server.api"
-        headers = {"Authorization": f"Bearer {token}"}
-        params = {
-            "method": "food_entries.get.v2",
-            "format": "json"
-        }
-        
-        r = requests.get(url, headers=headers, params=params)
-        data = r.json()
-
-        total_calories = 0
-        carbs = 0
-        protein = 0
-        fat = 0
-
-        # Разбор ответа
-        entries = data.get('food_entries', {}).get('food_entry', [])
-        if isinstance(entries, dict):
-            entries = [entries]
-
-        for entry in entries:
-            total_calories += float(entry.get('calories', 0))
-            carbs += float(entry.get('carbohydrate', 0))
-            protein += float(entry.get('protein', 0))
-            fat += float(entry.get('fat', 0))
-
-        return jsonify({
-            'consumedCalories': round(total_calories),
-            'carbs': round(carbs, 1),
-            'protein': round(protein, 1),
-            'fat': round(fat, 1)
-        })
-
-    except Exception as e:
-        print(f"FatSecret Error: {e}")
-        return jsonify({'error': str(e)}), 500
+# Эндпоинт для приема данных из iOS Shortcuts
+@app.route('/api/health/update', methods=['POST'])
+def update_health_data():
+    global health_data
+    data = request.get_json(silent=True) or {}
+    
+    health_data = {
+        'consumedCalories': round(float(data.get('calories', 0))),
+        'carbs': round(float(data.get('carbs', 0)), 1),
+        'protein': round(float(data.get('protein', 0)), 1),
+        'fat': round(float(data.get('fat', 0)), 1),
+        'activeCalories': round(float(data.get('activeCalories', 0))),
+        'restingCalories': round(float(data.get('restingCalories', 0))),
+        'steps': int(data.get('steps', 0)),
+        'distanceKm': round(float(data.get('distanceKm', 0)), 2),
+        'avgHeartRate': int(data.get('avgHeartRate', 0)),
+        'sleepHours': round(float(data.get('sleepHours', 0)), 1)
+    }
+    
+    print("Received updated metrics from Apple Health:", health_data)
+    return jsonify({"status": "success", "data": health_data})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
