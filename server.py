@@ -1,4 +1,5 @@
 import os
+import requests
 from flask import Flask, jsonify
 from flask_cors import CORS
 
@@ -8,6 +9,17 @@ CORS(app)
 FS_CLIENT_ID = os.environ.get("FS_CLIENT_ID")
 FS_CLIENT_SECRET = os.environ.get("FS_CLIENT_SECRET")
 
+def get_fatsecret_token():
+    """Автоматическое получение fresh access_token через OAuth 2.0"""
+    url = "https://oauth.fatsecret.com/connect/token"
+    data = {'grant_type': 'client_credentials', 'scope': 'basic'}
+    auth = (FS_CLIENT_ID, FS_CLIENT_SECRET)
+    
+    response = requests.post(url, data=data, auth=auth)
+    if response.status_code == 200:
+        return response.json().get('access_token')
+    return None
+
 @app.route('/')
 def home():
     return jsonify({"status": "ok", "message": "Backend is running"})
@@ -15,31 +27,39 @@ def home():
 @app.route('/api/fatsecret/today', methods=['GET'])
 def get_fatsecret_data():
     if not FS_CLIENT_ID or not FS_CLIENT_SECRET:
-        return jsonify({'error': 'FatSecret keys missing in environment'}), 400
+        return jsonify({'error': 'FatSecret keys are missing'}), 400
+
+    token = get_fatsecret_token()
+    if not token:
+        return jsonify({'error': 'Failed to obtain FatSecret access token'}), 500
 
     try:
-        from fatsecret import Fatsecret
-        fs = Fatsecret(FS_CLIENT_ID, FS_CLIENT_SECRET)
+        # Запрос данных дневника за сегодня через REST API
+        url = "https://platform.fatsecret.com/rest/server.api"
+        headers = {"Authorization": f"Bearer {token}"}
+        params = {
+            "method": "food_entries.get.v2",
+            "format": "json"
+        }
         
-        # Запрос к FatSecret API
-        # Обрати внимание: для доступа к личному дневнику конкретного профиля
-        # требуется привязка OAuth_token пользователя.
-        food_entries = fs.food_entries_get()
+        r = requests.get(url, headers=headers, params=params)
+        data = r.json()
 
         total_calories = 0
         carbs = 0
         protein = 0
         fat = 0
 
-        if food_entries:
-            if isinstance(food_entries, dict):
-                food_entries = [food_entries]
-                
-            for entry in food_entries:
-                total_calories += float(entry.get('calories', 0))
-                carbs += float(entry.get('carbohydrate', 0))
-                protein += float(entry.get('protein', 0))
-                fat += float(entry.get('fat', 0))
+        # Разбор ответа
+        entries = data.get('food_entries', {}).get('food_entry', [])
+        if isinstance(entries, dict):
+            entries = [entries]
+
+        for entry in entries:
+            total_calories += float(entry.get('calories', 0))
+            carbs += float(entry.get('carbohydrate', 0))
+            protein += float(entry.get('protein', 0))
+            fat += float(entry.get('fat', 0))
 
         return jsonify({
             'consumedCalories': round(total_calories),
