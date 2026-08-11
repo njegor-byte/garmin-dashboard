@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Egor's health dashboard</title>
+
+  <!-- CDN Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --bg-color: #f4f6f8;
+      --card-bg: #ffffff;
+      --text-main: #1f2937;
+      --text-sub: #6b7280;
+      --green: #10b981;
+      --red: #ef4444;
+      --orange: #f59e0b;
+      --blue: #3b82f6;
+      --purple: #8b5cf6;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .app-container {
+      width: 100%;
+      max-width: 400px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding-bottom: 70px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 20px;
+      padding: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+
+    .stat-box {
+      background: #f9fafb;
+      border-radius: 12px;
+      padding: 10px;
+      text-align: center;
+    }
+
+    .stat-title {
+      font-size: 11px;
+      color: var(--text-sub);
+      margin-bottom: 4px;
+    }
+
+    .stat-number {
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-sub);
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    /* Period Switcher */
+    .period-selector {
+      display: flex;
+      background: #e5e7eb;
+      border-radius: 10px;
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .period-btn {
+      flex: 1;
+      border: none;
+      background: transparent;
+      padding: 6px 0;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-sub);
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .period-btn.active {
+      background: var(--card-bg);
+      color: var(--text-main);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    /* Navigation Bar */
+    .tab-bar {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 400px;
+      background: var(--card-bg);
+      display: flex;
+      justify-content: space-around;
+      padding: 12px 0;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .tab-item {
+      font-size: 11px;
+      color: var(--text-sub);
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .tab-item.active { color: var(--blue); font-weight: 700; }
+    .tab-content { display: none; }
+    .tab-content.active { display: flex; flex-direction: column; gap: 16px; }
+
+    /* Form UI Elements */
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text-sub); margin-bottom: 4px; }
+    .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 14px; outline: none; }
+    .btn { width: 100%; padding: 12px; border: none; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; }
+    .btn-primary { background: var(--blue); color: white; }
+    .progress-bar { height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 4px; transition: width 0.3s ease; }
+
+    /* Activity Card Custom Styles */
+    .activity-card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 14px;
+      background: #ffffff;
+      border: 1px solid #f3f4f6;
+      border-radius: 16px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+    }
+    .activity-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .activity-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .badge-impact {
+      background: #fff7ed;
+      color: #c2410c;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 8px;
+      border: 1px solid #ffedd5;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    
+    <!-- TAB 1: TODAY -->
+    <div id="tab-today" class="tab-content active">
+      <div class="header">
+        <h2>Egor's health dashboard</h2>
+        <span style="font-size: 14px; color: var(--text-sub)">Today</span>
+      </div>
+
+      <!-- Smart Scale Sync -->
+      <div class="card" style="background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%); border: 1px solid #bbf7d0;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div class="stat-title" style="color: #166534;">Smart Scale Weight</div>
+            <div id="current-weight-display" style="font-size: 26px; font-weight: 800; color: #15803d;">79.7 kg</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 12px; font-weight: 700; color: var(--green);">-0.3 kg today</div>
+            <div style="font-size: 11px; color: var(--text-sub);">Auto-synced 08:15 AM</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Energy Balance -->
+      <div class="card" style="text-align: center;">
+        <div style="font-size: 13px; color: var(--text-sub); text-transform: uppercase;">Daily Balance</div>
+        <div id="balance-val" style="font-size: 36px; font-weight: 800; margin: 8px 0 4px;">0 kcal</div>
+        <div id="balance-status" style="font-size: 13px; font-weight: 600;">Calculating...</div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card stat-box">
+          <div class="stat-title">Eaten (FatSecret)</div>
+          <div id="eaten-val" class="stat-number" style="color: #059669;">0 kcal</div>
+        </div>
+        <div class="card stat-box">
+          <div class="stat-title">Burned (Garmin)</div>
+          <div id="burned-val" class="stat-number" style="color: #d97706;">0 kcal</div>
+        </div>
+      </div>
+
+      <!-- Energy & Nutrition Breakdown -->
+      <div class="card">
+        <div class="section-title">Calories & Macros Breakdown</div>
+        
+        <!-- Calories Row -->
+        <div style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px dashed #e5e7eb;">
+          <div style="display:flex; justify-content:space-between; font-size:14px; font-weight:700; margin-bottom: 6px;">
+            <span>Calories</span><span id="calories-text">0 / 0 kcal</span>
+          </div>
+          <div class="progress-bar" style="height: 10px;"><div id="calories-bar" class="progress-fill"></div></div>
+        </div>
+
+        <!-- Protein -->
+        <div style="margin-bottom: 12px;">
+          <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:600; margin-bottom: 4px;">
+            <span>Protein</span><span id="protein-text">0g / 0g</span>
+          </div>
+          <div class="progress-bar"><div id="protein-bar" class="progress-fill"></div></div>
+        </div>
+
+        <!-- Fats -->
+        <div style="margin-bottom: 12px;">
+          <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:600; margin-bottom: 4px;">
+            <span>Fats</span><span id="fats-text">0g / 0g</span>
+          </div>
+          <div class="progress-bar"><div id="fats-bar" class="progress-fill"></div></div>
+        </div>
+
+        <!-- Carbs -->
+        <div>
+          <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:600; margin-bottom: 4px;">
+            <span>Carbs</span><span id="carbs-text">0g / 0g</span>
+          </div>
+          <div class="progress-bar"><div id="carbs-bar" class="progress-fill"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: ANALYTICS -->
+    <div id="tab-analytics" class="tab-content">
+      <div class="header">
+        <h2>Analytics</h2>
+        <span style="font-size: 14px; color: var(--text-sub)">Body & Performance</span>
+      </div>
+
+      <!-- Time Period Switcher -->
+      <div class="period-selector">
+        <button class="period-btn active" onclick="setPeriod('7D', this)">7D</button>
+        <button class="period-btn" onclick="setPeriod('30D', this)">30D</button>
+        <button class="period-btn" onclick="setPeriod('3M', this)">3M</button>
+        <button class="period-btn" onclick="setPeriod('1Y', this)">1Y</button>
+      </div>
+
+      <!-- Weight & Native Scale Data Card -->
+      <div class="card">
+        <div class="section-title" style="display:flex; justify-content:space-between;">
+          <span>Weight & Trend Dynamics</span>
+          <span style="color: var(--green); font-weight:bold;">-0.8 kg total</span>
+        </div>
+        <canvas id="weightChart" style="max-height: 180px;"></canvas>
+        
+        <div class="grid-2" style="margin-top: 16px;">
+          <div class="stat-box">
+            <div class="stat-title"><span class="period-label">7D</span> Avg Weight</div>
+            <div class="stat-number">79.8 kg</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-title">Body Fat % (Scale)</div>
+            <div class="stat-number" style="color: var(--blue);">17.2% <span style="font-size:11px; color:var(--green)">-0.4%</span></div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-title">Muscle Mass</div>
+            <div class="stat-number">62.4 kg <span style="font-size:11px; color:var(--green)">+0.1kg</span></div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-title">Body Water</div>
+            <div class="stat-number">58.1% <span style="font-size:11px; color:var(--text-sub)">=</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Net Caloric Balance Card -->
+      <div class="card">
+        <div class="section-title">Net Caloric Balance (<span class="period-label">7D</span>)</div>
+        <canvas id="energyChart" style="max-height: 180px;"></canvas>
+        
+        <!-- Dynamic Averages Block -->
+        <div class="grid-3" style="margin-top: 12px;">
+          <div class="stat-box" style="background: #f0fdf4;">
+            <div class="stat-title" style="color: #166534;">Avg Eaten</div>
+            <div id="avg-eaten-val" class="stat-number" style="color: #059669;">2,011 kcal</div>
+          </div>
+          <div class="stat-box" style="background: #fffbeb;">
+            <div class="stat-title" style="color: #92400e;">Avg Burned</div>
+            <div id="avg-burned-val" class="stat-number" style="color: #d97706;">2,314 kcal</div>
+          </div>
+          <div class="stat-box" style="background: #f0fdf4;">
+            <div class="stat-title" style="color: #166534;">Avg Deficit</div>
+            <div id="avg-net-val" class="stat-number" style="color: var(--green);">-303 kcal/d</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Garmin Recovery -->
+      <div class="card">
+        <div class="section-title">Sleep & HRV Status (Garmin)</div>
+        <div class="grid-2">
+          <div class="stat-box">
+            <div class="stat-title">Avg Sleep Score</div>
+            <div class="stat-number" style="color: var(--purple);">84 / 100</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-title">Avg HRV Status</div>
+            <div class="stat-number" style="color: var(--green);">Balanced (62 ms)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: ACTIVITIES (OTRISOWANO) -->
+    <div id="tab-activities" class="tab-content">
+      <div class="header">
+        <h2>Activities</h2>
+        <span style="font-size: 14px; color: var(--text-sub)">Garmin Sync</span>
+      </div>
+
+      <!-- Total Activity Contribution Breakdown -->
+      <div class="card">
+        <div class="section-title">Daily Burn Contribution</div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom: 6px; font-weight:600;">
+          <span style="color:var(--text-sub)">Base Metabolic (BMR): 1,600 kcal (76%)</span>
+          <span style="color:#d97706">Active: 500 kcal (24%)</span>
+        </div>
+        <div class="progress-bar" style="height: 12px; display:flex;">
+          <div style="width: 76%; background: #cbd5e1; height:100%;"></div>
+          <div style="width: 24%; background: #f59e0b; height:100%;"></div>
+        </div>
+      </div>
+
+      <!-- Activity Log Cards -->
+      <div class="card" style="display:flex; flex-direction:column; gap:12px;">
+        <div class="section-title" style="margin-bottom:4px;">Today's Workout Log</div>
+
+        <!-- Activity Item 1 -->
+        <div class="activity-card">
+          <div class="activity-header">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div class="activity-icon" style="background: #fee2e2; color: #ef4444;">🏃</div>
+              <div>
+                <div style="font-weight: 700; font-size: 14px;">Morning Run</div>
+                <div style="font-size: 11px; color: var(--text-sub);">08:30 AM • Outdoor</div>
+              </div>
+            </div>
+            <div class="badge-impact">+15.2% Daily Burn</div>
+          </div>
+          <div class="grid-3" style="margin-top: 4px;">
+            <div class="stat-box">
+              <div class="stat-title">Duration</div>
+              <div class="stat-number" style="font-size:13px;">32 min</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-title">Avg HR</div>
+              <div class="stat-number" style="font-size:13px; color: var(--red);">148 bpm</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-title">Burned</div>
+              <div class="stat-number" style="font-size:13px; color: var(--orange);">320 kcal</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity Item 2 -->
+        <div class="activity-card">
+          <div class="activity-header">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div class="activity-icon" style="background: #e0e7ff; color: #4338ca;">🏋️‍♂️</div>
+              <div>
+                <div style="font-weight: 700; font-size: 14px;">Strength Training</div>
+                <div style="font-size: 11px; color: var(--text-sub);">06:15 PM • Gym</div>
+              </div>
+            </div>
+            <div class="badge-impact">+8.5% Daily Burn</div>
+          </div>
+          <div class="grid-3" style="margin-top: 4px;">
+            <div class="stat-box">
+              <div class="stat-title">Duration</div>
+              <div class="stat-number" style="font-size:13px;">45 min</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-title">Avg HR</div>
+              <div class="stat-number" style="font-size:13px; color: var(--red);">122 bpm</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-title">Burned</div>
+              <div class="stat-number" style="font-size:13px; color: var(--orange);">180 kcal</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- TAB 4: SETTINGS -->
+    <div id="tab-settings" class="tab-content">
+      <div class="header">
+        <h2>Settings</h2>
+        <span style="font-size: 14px; color: var(--text-sub)">Targets & Scale Integration</span>
+      </div>
+
+      <div class="card" style="border: 1px solid #3b82f6; background: #eff6ff;">
+        <div class="section-title" style="color: var(--blue);">Dynamic AI Macro Advisor</div>
+        <div class="grid-2">
+          <div class="form-group"><label>Current Weight (kg)</label><input type="number" id="user-weight" value="79.7" step="0.1" onchange="autoRecalculateAI()"></div>
+          <div class="form-group"><label>Height (cm)</label><input type="number" id="user-height" value="180" onchange="autoRecalculateAI()"></div>
+        </div>
+        <div class="grid-2">
+          <div class="form-group"><label>Age</label><input type="number" id="user-age" value="30" onchange="autoRecalculateAI()"></div>
+          <div class="form-group"><label>Goal</label>
+            <select id="user-goal" onchange="autoRecalculateAI()">
+              <option value="deficit">Fat Loss (-15%)</option>
+              <option value="maintain">Maintain Weight</option>
+              <option value="surplus">Muscle Gain (+10%)</option>
+            </select>
+          </div>
+        </div>
+        <div id="ai-result" style="margin-top: 8px; font-size: 13px; line-height: 1.4; color: #1e40af;">
+          <strong>Dynamic Recommendations (Auto-calculated):</strong><br>
+          <span id="ai-text"></span>
+          <button class="btn btn-primary" style="margin-top:10px;" onclick="applyAIRec()">Apply Updated Targets</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="tab-bar">
+    <div class="tab-item active" onclick="switchTab('today')">Today</div>
+    <div class="tab-item" onclick="switchTab('analytics')">Analytics</div>
+    <div class="tab-item" onclick="switchTab('activities')">Activities</div>
+    <div class="tab-item" onclick="switchTab('settings')">Settings</div>
+  </div>
+
+  <script>
+    let currentWeight = 79.7;
+    let selectedPeriod = '7D';
+    const eaten = 1985;
+    const burned = 2100;
+    const eatenMacros = { protein: 125, fats: 50, carbs: 210 };
+    let targets = { calories: 2200, protein: 160, fats: 72, carbs: 230 };
+    let weightChartInstance = null;
+    let energyChartInstance = null;
+
+    // Period Datasets Mock
+    const periodData = {
+      '7D': {
+        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        eaten: [2100, 1950, 2050, 1800, 2200, 2800, 1985],
+        burned: [2400, 2300, 2500, 2200, 2600, 2100, 2100],
+        weights: [80.5, 80.2, 80.4, 79.9, 80.1, 79.8, 79.7]
+      },
+      '30D': {
+        labels: ['W1', 'W2', 'W3', 'W4'],
+        eaten: [2050, 1980, 2120, 1990],
+        burned: [2350, 2400, 2380, 2300],
+        weights: [81.2, 80.8, 80.3, 79.8]
+      },
+      '3M': {
+        labels: ['Month 1', 'Month 2', 'Month 3'],
+        eaten: [2150, 2020, 2000],
+        burned: [2400, 2380, 2350],
+        weights: [83.0, 81.5, 79.8]
+      },
+      '1Y': {
+        labels: ['Q1', 'Q2', 'Q3', 'Q4'],
+        eaten: [2200, 2100, 2050, 2010],
+        burned: [2350, 2400, 2380, 2320],
+        weights: [85.0, 83.2, 81.0, 79.8]
+      }
+    };
+
+    function calculateMovingAverage(data, windowSize = 3) {
+      let result = [];
+      for (let i = 0; i < data.length; i++) {
+        let start = Math.max(0, i - windowSize + 1);
+        let subset = data.slice(start, i + 1);
+        let sum = subset.reduce((a, b) => a + b, 0);
+        result.push(Number((sum / subset.length).toFixed(2)));
+      }
+      return result;
+    }
+
+    function setPeriod(period, btnEl) {
+      selectedPeriod = period;
+      document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+      btnEl.classList.add('active');
+      document.querySelectorAll('.period-label').forEach(el => el.innerText = period);
+      renderAnalyticsCharts();
+    }
+
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+
+      if (tabName === 'today') {
+        document.getElementById('tab-today').classList.add('active');
+        document.querySelectorAll('.tab-item')[0].classList.add('active');
+      } else if (tabName === 'analytics') {
+        document.getElementById('tab-analytics').classList.add('active');
+        document.querySelectorAll('.tab-item')[1].classList.add('active');
+        renderAnalyticsCharts();
+      } else if (tabName === 'activities') {
+        document.getElementById('tab-activities').classList.add('active');
+        document.querySelectorAll('.tab-item')[2].classList.add('active');
+      } else if (tabName === 'settings') {
+        document.getElementById('tab-settings').classList.add('active');
+        document.querySelectorAll('.tab-item')[3].classList.add('active');
+      }
+    }
+
+    function updateTodayScreen() {
+      document.getElementById('current-weight-display').innerText = `${currentWeight} kg`;
+      const balance = eaten - burned;
+      const balanceEl = document.getElementById('balance-val');
+      const statusEl = document.getElementById('balance-status');
+
+      document.getElementById('eaten-val').innerText = `${eaten.toLocaleString()} kcal`;
+      document.getElementById('burned-val').innerText = `${burned.toLocaleString()} kcal`;
+
+      if (balance < 0) {
+        balanceEl.innerText = `${balance} kcal`;
+        balanceEl.style.color = 'var(--green)';
+        statusEl.innerText = 'Target Deficit';
+        statusEl.style.color = 'var(--green)';
+      } else {
+        balanceEl.innerText = `+${balance} kcal`;
+        balanceEl.style.color = 'var(--red)';
+        statusEl.innerText = 'Calorie Surplus';
+        statusEl.style.color = 'var(--red)';
+      }
+
+      renderCaloriesBar(eaten, targets.calories);
+      renderMacro('protein', eatenMacros.protein, targets.protein, '#10b981');
+      renderMacro('fats', eatenMacros.fats, targets.fats, '#f59e0b');
+      renderMacro('carbs', eatenMacros.carbs, targets.carbs, '#3b82f6');
+    }
+
+    function renderCaloriesBar(current, target) {
+      const isOver = current > target;
+      const left = target - current;
+      const textEl = document.getElementById('calories-text');
+      const barEl = document.getElementById('calories-bar');
+
+      barEl.style.width = `${Math.min((current / target) * 100, 100)}%`;
+      if (isOver) {
+        barEl.style.background = 'var(--red)';
+        textEl.innerHTML = `${current.toLocaleString()} / ${target.toLocaleString()} kcal <span style="color: var(--red); font-weight:700">(+${Math.abs(left)} kcal over)</span>`;
+      } else {
+        barEl.style.background = 'var(--green)';
+        textEl.innerHTML = `${current.toLocaleString()} / ${target.toLocaleString()} kcal <span style="color: var(--green); font-weight:700">(${left.toLocaleString()} kcal left)</span>`;
+      }
+    }
+
+    function renderMacro(type, current, target, color) {
+      const isOver = current > target;
+      const left = target - current;
+      const textEl = document.getElementById(`${type}-text`);
+      const barEl = document.getElementById(`${type}-bar`);
+
+      barEl.style.width = `${Math.min((current / target) * 100, 100)}%`;
+      if (isOver) {
+        barEl.style.background = 'var(--red)';
+        textEl.innerHTML = `${current}g / ${target}g <span style="color: var(--red); font-weight:600">(+${Math.abs(left)}g)</span>`;
+      } else {
+        barEl.style.background = color;
+        textEl.innerHTML = `${current}g / ${target}g <span style="color: var(--text-sub); font-weight:400">(${left}g left)</span>`;
+      }
+    }
+
+    function autoRecalculateAI() {
+      currentWeight = parseFloat(document.getElementById('user-weight').value);
+      const height = parseFloat(document.getElementById('user-height').value);
+      const age = parseFloat(document.getElementById('user-age').value);
+      const goal = document.getElementById('user-goal').value;
+
+      let bmr = (10 * currentWeight) + (6.25 * height) - (5 * age) + 5;
+      let tdee = bmr * 1.375;
+
+      if (goal === 'deficit') tdee *= 0.85;
+      if (goal === 'surplus') tdee *= 1.10;
+
+      const targetCalories = Math.round(tdee);
+      const proteinGrams = Math.round(currentWeight * 2.0);
+      const fatsGrams = Math.round(currentWeight * 0.9);
+      const carbsGrams = Math.round((targetCalories - ((proteinGrams * 4) + (fatsGrams * 9))) / 4);
+
+      targets = { calories: targetCalories, protein: proteinGrams, fats: fatsGrams, carbs: carbsGrams };
+
+      document.getElementById('ai-text').innerHTML = `
+        Based on weight <b>${currentWeight}kg</b>:<br>
+        • Target Energy: <b>${targetCalories} kcal</b><br>
+        • Protein: <b>${proteinGrams}g</b> | Fats: <b>${fatsGrams}g</b> | Carbs: <b>${carbsGrams}g</b>
+      `;
+    }
+
+    function applyAIRec() {
+      updateTodayScreen();
+      alert('Dynamic Targets Applied!');
+      switchTab('today');
+    }
+
+    function renderAnalyticsCharts() {
+      const currentData = periodData[selectedPeriod];
+      const labels = currentData.labels;
+
+      if (weightChartInstance) weightChartInstance.destroy();
+      const ctx1 = document.getElementById('weightChart').getContext('2d');
+      const trendValues = calculateMovingAverage(currentData.weights, 3);
+
+      weightChartInstance = new Chart(ctx1, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Daily Weight (kg)',
+              data: currentData.weights,
+              borderColor: '#9ca3af',
+              borderDash: [3, 3],
+              pointRadius: 3,
+              fill: false
+            },
+            {
+              label: 'Weight Trend',
+              data: trendValues,
+              borderColor: '#10b981',
+              borderWidth: 3,
+              tension: 0.3,
+              pointRadius: 0
+            }
+          ]
+        },
+        options: { 
+          responsive: true, 
+          plugins: { 
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } 
+          } 
+        }
+      });
+
+      if (energyChartInstance) energyChartInstance.destroy();
+      const ctx2 = document.getElementById('energyChart').getContext('2d');
+      
+      const eatenData = currentData.eaten;
+      const burnedData = currentData.burned;
+      const netBalance = eatenData.map((e, index) => e - burnedData[index]);
+      const barColors = netBalance.map(val => val > 0 ? '#ef4444' : '#10b981');
+
+      const avgEaten = Math.round(eatenData.reduce((a, b) => a + b, 0) / eatenData.length);
+      const avgBurned = Math.round(burnedData.reduce((a, b) => a + b, 0) / burnedData.length);
+      const avgNet = avgEaten - avgBurned;
+
+      document.getElementById('avg-eaten-val').innerText = `${avgEaten.toLocaleString()} kcal`;
+      document.getElementById('avg-burned-val').innerText = `${avgBurned.toLocaleString()} kcal`;
+      
+      const avgNetEl = document.getElementById('avg-net-val');
+      if (avgNet < 0) {
+        avgNetEl.innerText = `${avgNet} kcal/d`;
+        avgNetEl.style.color = 'var(--green)';
+      } else {
+        avgNetEl.innerText = `+${avgNet} kcal/d`;
+        avgNetEl.style.color = 'var(--red)';
+      }
+
+      energyChartInstance = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Net Balance (kcal)',
+            data: netBalance,
+            backgroundColor: barColors,
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { 
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  let val = context.raw;
+                  return val > 0 ? `+${val} kcal (Surplus)` : `${val} kcal (Deficit)`;
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              grid: { color: (context) => context.tick.value === 0 ? '#1f2937' : '#e5e7eb', lineWidth: (context) => context.tick.value === 0 ? 2 : 1 }
+            }
+          }
+        }
+      });
+    }
+
+    autoRecalculateAI();
+    updateTodayScreen();
+  </script>
+
+</body>
+</html>
