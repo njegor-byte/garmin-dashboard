@@ -5,33 +5,34 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Единая база данных за текущий день
 health_data = {
-    # Питание (из FatSecret)
+    # Питание
     'consumedCalories': 0,
     'carbs': 0,
     'protein': 0,
     'fat': 0,
     
-    # Активность и Здоровье (из Garmin)
+    # Активность и здоровье
     'activeCalories': 0,
     'restingCalories': 0,
     'steps': 0,
     'distanceKm': 0.0,
     'avgHeartRate': 0,
-    'sleepHours': 0.0
+    'sleepHours': 0.0,
+    
+    # Тело
+    'weight': 0.0,
+    'bodyFat': 0.0
 }
 
 @app.route('/')
 def home():
     return jsonify({"status": "ok", "message": "Health Dashboard Backend Ready"})
 
-# Эндпоинт для дашборда
 @app.route('/api/health/today', methods=['GET'])
 def get_health_data():
     return jsonify(health_data)
 
-# Эндпоинт для приема данных из iOS Shortcuts
 @app.route('/api/health/update', methods=['POST'])
 def update_health_data():
     global health_data
@@ -47,10 +48,12 @@ def update_health_data():
         'steps': int(data.get('steps', 0)),
         'distanceKm': round(float(data.get('distanceKm', 0)), 2),
         'avgHeartRate': int(data.get('avgHeartRate', 0)),
-        'sleepHours': round(float(data.get('sleepHours', 0)), 1)
+        'sleepHours': round(float(data.get('sleepHours', 0)), 1),
+        'weight': round(float(data.get('weight', 0)), 1),
+        'bodyFat': round(float(data.get('bodyFat', 0)), 1)
     }
     
-    print("Received updated metrics from Apple Health:", health_data)
+    print("Received updated metrics:", health_data)
     return jsonify({"status": "success", "data": health_data})
 
 if __name__ == '__main__':
