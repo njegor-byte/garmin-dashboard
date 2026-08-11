@@ -1,95 +1,57 @@
-import datetime
 import os
 from flask import Flask, jsonify
 from flask_cors import CORS
-from garminconnect import Garmin
 
 app = Flask(__name__)
 CORS(app)
 
-GARMIN_EMAIL = os.getenv("GARMIN_EMAIL")
-GARMIN_PASSWORD = os.getenv("GARMIN_PASSWORD")
-TOKEN_DIR = "/tmp/.garminconnect"
+FS_CLIENT_ID = os.environ.get("FS_CLIENT_ID")
+FS_CLIENT_SECRET = os.environ.get("FS_CLIENT_SECRET")
 
-client = None
+@app.route('/')
+def home():
+    return jsonify({"status": "ok", "message": "Backend is running"})
 
+@app.route('/api/fatsecret/today', methods=['GET'])
+def get_fatsecret_data():
+    if not FS_CLIENT_ID or not FS_CLIENT_SECRET:
+        return jsonify({'error': 'FatSecret keys missing in environment'}), 400
 
-def get_garmin_client():
-  global client
-  if client is not None:
-    return client
+    try:
+        from fatsecret import Fatsecret
+        fs = Fatsecret(FS_CLIENT_ID, FS_CLIENT_SECRET)
+        
+        # Запрос к FatSecret API
+        # Обрати внимание: для доступа к личному дневнику конкретного профиля
+        # требуется привязка OAuth_token пользователя.
+        food_entries = fs.food_entries_get()
 
-  if not GARMIN_EMAIL or not GARMIN_PASSWORD:
-    raise ValueError("Garmin credentials are not set in environment variables")
+        total_calories = 0
+        carbs = 0
+        protein = 0
+        fat = 0
 
-  garmin = Garmin(GARMIN_EMAIL, GARMIN_PASSWORD)
+        if food_entries:
+            if isinstance(food_entries, dict):
+                food_entries = [food_entries]
+                
+            for entry in food_entries:
+                total_calories += float(entry.get('calories', 0))
+                carbs += float(entry.get('carbohydrate', 0))
+                protein += float(entry.get('protein', 0))
+                fat += float(entry.get('fat', 0))
 
-  try:
-    garmin.login(TOKEN_DIR)
-  except Exception:
-    garmin.login()
-    garmin.garth.dump(TOKEN_DIR)
+        return jsonify({
+            'consumedCalories': round(total_calories),
+            'carbs': round(carbs, 1),
+            'protein': round(protein, 1),
+            'fat': round(fat, 1)
+        })
 
-  client = garmin
-  return client
+    except Exception as e:
+        print(f"FatSecret Error: {e}")
+        return jsonify({'error': str(e)}), 500
 
-
-def get_garmin_data():
-  try:
-    garmin = get_garmin_client()
-    today = datetime.date.today().isoformat()
-
-    activities = garmin.get_activities_by_date(today, today, "")
-    stats = garmin.get_user_summary(today)
-
-    bmr = (
-        stats.get("bmrCalories")
-        or stats.get("restingCalories")
-        or stats.get("bmrKilocalories")
-        or 0
-    )
-    active = (
-        stats.get("activeCalories")
-        or stats.get("activeKilocalories")
-        or stats.get("netCalorieGoal")
-        or 0
-    )
-    total = stats.get("totalKilocalories") or stats.get("totalCalories") or 0
-
-    if total == 0 and (bmr > 0 or active > 0):
-      total = bmr + active
-
-    parsed_activities = []
-    for act in activities:
-      parsed_activities.append({
-          "name": act.get("activityName", "Workout"),
-          "type": act.get("activityType", {}).get("typeKey", "workout"),
-          "durationMin": round(act.get("duration", 0) / 60),
-          "avgHr": round(act.get("averageHR", 0)),
-          "calories": round(act.get("calories", 0)),
-      })
-
-    return {
-        "bmrCalories": round(bmr),
-        "activeCalories": round(active),
-        "totalBurned": round(total),
-        "activities": parsed_activities,
-    }
-  except Exception as e:
-    print(f"Garmin error: {e}")
-    global client
-    client = None
-    return None
-
-
-@app.route("/api/garmin/today", methods=["GET"])
-def garmin_today():
-  data = get_garmin_data()
-  if data:
-    return jsonify(data)
-  return jsonify({"error": "Failed to fetch Garmin data"}), 500
-
-
-if __name__ == "__main__":
-  port = int(os.environ.get("PORT", 5000))
-  app.run(host="0.0.0.0", port=port)
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
